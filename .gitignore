@@ -1,0 +1,12 @@
+**/node_modules/
+**/.env
+**/build/
+**/dist/
+**/.gradle/
+**/.cxx/
+**/local.properties
+**/recordings/
+**/test-results/
+**/Pods/
+# Downloaded Puppeteer browsers
+/server-web/.cache/

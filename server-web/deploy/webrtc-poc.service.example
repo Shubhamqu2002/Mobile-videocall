@@ -1,0 +1,22 @@
+[Unit]
+Description=WebRTC POC signaling and frontend
+After=network.target
+
+[Service]
+Type=simple
+User=webrtc
+Group=webrtc
+WorkingDirectory=/opt/webrtc-poc
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/webrtc-poc/.env
+# Check `command -v node` on your server and adjust this path.
+ExecStart=/usr/bin/node /opt/webrtc-poc/server/index.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

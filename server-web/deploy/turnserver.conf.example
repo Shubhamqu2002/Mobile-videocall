@@ -1,0 +1,35 @@
+# Dedicated Ubuntu TURN VM with a public IPv4; replace every placeholder.
+listening-port=3478
+tls-listening-port=443
+listening-ip=0.0.0.0
+# Direct public interface: PUBLIC_IP. Behind 1:1 NAT: PUBLIC_IP/PRIVATE_IP.
+external-ip=REPLACE_PUBLIC_IP
+realm=turn.example.com
+fingerprint
+use-auth-secret
+static-auth-secret=REPLACE_WITH_THE_SAME_TURN_SECRET_AS_NODE
+cert=/etc/turnserver/certs/fullchain.pem
+pkey=/etc/turnserver/certs/privkey.pem
+min-port=49160
+max-port=49200
+no-multicast-peers
+no-cli
+no-tlsv1
+no-tlsv1_1
+user-quota=8
+total-quota=100
+stale-nonce=600
+no-software-attribute
+# Prevent relaying to internal IPv4 networks in this public-internet POC.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=224.0.0.0-255.255.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+log-file=stdout
+simple-log

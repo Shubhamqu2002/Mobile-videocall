@@ -1,0 +1,5 @@
+# Replace calls.example.com. Point its DNS A/AAAA records at the app server.
+# Node stays bound to loopback. Caddy terminates HTTPS and proxies WebSocket.
+calls.example.com {
+    reverse_proxy 127.0.0.1:3001
+}
