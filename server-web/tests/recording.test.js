@@ -39,7 +39,7 @@ test("recorder rejects unauthorized/absent consent and stops on revocation; capa
       closed = true;
     },
   });
-  const service = createApp({ STUN_URL: "", recorderLauncher: fakeLauncher });
+  const service = createApp({ MAX_ROOM_PARTICIPANTS: "2", STUN_URL: "", recorderLauncher: fakeLauncher });
   await new Promise((r) => service.http.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${service.http.address().port}`,
     sockets = [];
@@ -55,7 +55,7 @@ test("recorder rejects unauthorized/absent consent and stops on revocation; capa
       outsider = await connect();
     assert.match(
       (await outsider.emitWithAck("recording-start", {})).error,
-      /Both participants/
+      /At least two participants/
     );
     assert.match(
       (
@@ -72,12 +72,12 @@ test("recorder rejects unauthorized/absent consent and stops on revocation; capa
     await a.emitWithAck("join", { ...room, name: "Alice", consent: true });
     assert.match(
       (await a.emitWithAck("recording-start", {})).error,
-      /Both participants/
+      /At least two participants/
     );
     await b.emitWithAck("join", { ...room, name: "Bob", consent: false });
     assert.match(
       (await a.emitWithAck("recording-start", {})).error,
-      /Both participants/
+      /At least two participants/
     );
     const roster = once(a, "peers");
     b.emit("media", { consent: true });

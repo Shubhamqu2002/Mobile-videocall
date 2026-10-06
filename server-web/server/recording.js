@@ -21,7 +21,7 @@ export function installRecording({
   const retention =
     Math.max(1, Number(env.RECORDING_RETENTION_HOURS) || 24) * 3600000;
   const authorized = (room) =>
-    room?.members.size === 2 &&
+    room?.members.size >= 2 &&
     [...room.members.values()].every((m) => m.consent);
   const status = (s, value) =>
     io.to(s.room.id).emit("recording-state", { status: value });
@@ -73,12 +73,15 @@ export function installRecording({
           name = `call-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
         const expires = Date.now() + retention;
         downloads.set(key, { path: s.path, name, expires });
-        io.to(s.room.id).emit("recording-ready", {
-          url: `/recordings/${key}`,
-          name,
-          size,
-          expiresAt: expires,
-        });
+        io.to(s.memberIds.filter((id) => s.room.members.has(id))).emit(
+          "recording-ready",
+          {
+            url: `/recordings/${key}`,
+            name,
+            size,
+            expiresAt: expires,
+          }
+        );
       } else await fs.rm(s.path, { force: true }).catch(() => {});
       status(s, "idle");
       if (reason) io.to(s.room.id).emit("recording-error", reason);
@@ -162,7 +165,7 @@ export function installRecording({
       if (!authorized(room))
         return ack({
           error:
-            "Both participants must join and allow server recording first.",
+            "At least two participants must join, and everyone must allow server recording first.",
         });
       if (room.recording)
         return ack({ error: "A recording is already active or being saved." });
@@ -175,6 +178,7 @@ export function installRecording({
         id,
         token: secret(),
         room,
+        memberIds: [...room.members.keys()],
         path: path.join(folder, `${id}.webm`),
         bytes: 0,
         writes: Promise.resolve(),
@@ -240,10 +244,13 @@ export function installRecording({
   function changed(room) {
     const s = room.recording;
     if (!s) return;
-    if (!authorized(room))
+    const membershipChanged =
+      room.members.size !== s.memberIds.length ||
+      s.memberIds.some((id) => !room.members.has(id));
+    if (!authorized(room) || membershipChanged)
       void stop(
         s,
-        "Recording stopped because a participant left or withdrew consent."
+        "Recording stopped because the participant list changed or someone withdrew consent. Start a new recording once everyone agrees."
       );
     else
       s.observer?.emit(

@@ -2,6 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PeerRoom } from "./rtc/PeerRoom";
 import "./styles.css";
+import {
+  API_BASE_URL,
+  checkBackendTransport,
+  readInvitation,
+  makeInvitation,
+} from "./config";
 
 function Icon({ name, ...props }) {
   const paths = {
@@ -195,7 +201,7 @@ function Preferences({ value, onChange, disabled }) {
         <span>Allow server recording</span>
       </label>
       <p className="form-help">
-        Recording needs both participants’ consent. Files are stored on your
+        Recording needs every participant’s consent. Files are stored on your
         server for 24 hours by default.
       </p>
     </div>
@@ -204,6 +210,7 @@ function Preferences({ value, onChange, disabled }) {
 
 const emptyState = {
   peers: [],
+  participants: [],
   messages: [],
   recordings: [],
   status: "Ready",
@@ -252,6 +259,7 @@ function App() {
     }
   }
   useEffect(() => {
+    alive.current = true;
     document.title = "AI Interview Room";
     refreshDevices();
     navigator.mediaDevices?.addEventListener("devicechange", refreshDevices);
@@ -296,12 +304,13 @@ function App() {
     setPending(mode);
     let call;
     try {
+      checkBackendTransport();
       let roomId, roomKey;
       if (mode === "create") {
         const abort = new AbortController();
         const timeout = setTimeout(() => abort.abort(), 12000);
         try {
-          const response = await fetch("/api/rooms", {
+          const response = await fetch(`${API_BASE_URL}/api/rooms`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: "{}",
@@ -318,29 +327,7 @@ function App() {
           clearTimeout(timeout);
         }
       } else {
-        let url;
-        try {
-          url = new URL(invite.trim());
-        } catch {
-          throw new Error(
-            "Paste the complete invitation URL, including #room= and &key=."
-          );
-        }
-        if (!["http:", "https:"].includes(url.protocol))
-          throw new Error("The invitation must be an HTTP or HTTPS URL.");
-        const localHost = (u) =>
-          ["localhost", "127.0.0.1"].includes(u.hostname) &&
-          ["3001", "5173"].includes(u.port);
-        if (
-          url.origin !== location.origin &&
-          !(localHost(url) && localHost(new URL(location.href)))
-        )
-          throw new Error(
-            "This invitation belongs to another address. Open it on its original HTTPS site. For a local phone invitation, use this PC’s localhost address before /# and keep the room/key unchanged."
-          );
-        const params = new URLSearchParams(url.hash.slice(1));
-        roomId = params.get("room");
-        roomKey = params.get("key");
+        ({ roomId, roomKey } = readInvitation(invite));
       }
       if (!roomId || !roomKey)
         throw new Error(
@@ -349,7 +336,7 @@ function App() {
       const url = new URL(location.origin + "/");
       url.hash = new URLSearchParams({ room: roomId, key: roomKey }).toString();
       history.replaceState(null, "", url);
-      setInvite(url.href);
+      setInvite(makeInvitation(roomId, roomKey));
       setName(profile.name.trim());
       controller.current?.leave();
       call = new PeerRoom({
@@ -388,6 +375,8 @@ function App() {
         setError(
           err.name === "AbortError"
             ? "The server took too long to respond. Check the server terminal and retry."
+            : err instanceof TypeError
+            ? `Cannot reach ${API_BASE_URL}. Check backend availability, CORS and HTTPS settings.`
             : err.message
         );
     } finally {
@@ -416,9 +405,9 @@ function App() {
   async function copy() {
     try {
       await navigator.clipboard.writeText(invite);
-      setNotice("Invitation copied. Share it with the other participant.");
+      setNotice("Invitation copied. Share it with your participants.");
     } catch {
-      setNotice("Select and copy the invitation from the address bar.");
+      setNotice("Copy the invitation from the invitation field below.");
     }
   }
   function leave() {
@@ -438,14 +427,14 @@ function App() {
       "You have left the room. Any available recordings are listed below."
     );
   }
-  const remote = state.remoteMember;
+  const participants = state.participants || [];
   const recordingStatus = state.serverRecording?.status;
   const recording =
     ["starting", "recording", "stopping"].includes(recordingStatus) ||
     state.recording;
   const canRecord =
     state.connection === "connected" &&
-    state.peers.length === 2 &&
+    state.peers.length >= 2 &&
     state.peers.every((p) => p.consent);
 
   return (
@@ -462,7 +451,7 @@ function App() {
         </div>
         <span className="header-tag">
           <span className="live-dot" />
-          1:1 video workspace
+          Group video workspace
         </span>
       </header>
       <main>
@@ -541,7 +530,7 @@ function App() {
                 <p className="card-description">
                   Your room. Your next great conversation.
                   <br />
-                  Start a session and invite one participant.
+                  Start a session and invite your participants.
                 </p>
                 <label className="field-label" htmlFor="host-name">
                   Your name
@@ -567,7 +556,7 @@ function App() {
                     </span>
                   </div>
                   <div>
-                    <strong>A room for two</strong>
+                    <strong>A room for your group</strong>
                     <small>Your invitation link is created instantly.</small>
                   </div>
                 </div>
@@ -708,8 +697,8 @@ function App() {
                   Good to see you, <em>{name}.</em>
                 </h1>
                 <p className="muted">
-                  {remote
-                    ? `You’re in a room with ${remote.name}.`
+                  {participants.length
+                    ? `${state.peers.length} people in this room. Each participant has a separate media connection.`
                     : "Your room is ready. Share the invitation to bring someone in."}
                 </p>
               </div>
@@ -728,6 +717,14 @@ function App() {
                 </button>
               </div>
             </section>
+            <label className="group-invite">
+              Room invitation
+              <input
+                readOnly
+                value={invite}
+                onFocus={(event) => event.target.select()}
+              />
+            </label>
             {state.cameraError && (
               <div className="banner warning" role="status">
                 <span>
@@ -759,13 +756,16 @@ function App() {
                     name={`${name} · You`}
                     enabled={state.camera}
                   />
-                  <Video
-                    stream={state.remote}
-                    name={remote?.name || "Your guest"}
-                    enabled={remote?.camera !== false}
-                  />
+                  {participants.map((participant) => (
+                    <Video
+                      key={participant.id}
+                      stream={participant.stream}
+                      name={`${participant.name} · ${participant.connection}`}
+                      enabled={participant.camera !== false}
+                    />
+                  ))}
                 </div>
-                {(state.sharing || remote?.sharing) && (
+                {(state.sharing || participants.some((p) => p.sharing)) && (
                   <div className="screen-grid">
                     {state.sharing && (
                       <Video
@@ -775,14 +775,17 @@ function App() {
                         screen
                       />
                     )}
-                    {remote?.sharing && (
-                      <Video
-                        stream={state.remoteScreen}
-                        muted
-                        name={`${remote.name}'s screen`}
-                        screen
-                      />
-                    )}
+                    {participants
+                      .filter((p) => p.sharing)
+                      .map((participant) => (
+                        <Video
+                          key={participant.id}
+                          stream={participant.screenStream}
+                          muted
+                          name={`${participant.name}'s screen`}
+                          screen
+                        />
+                      ))}
                   </div>
                 )}
                 <div className="toolbar" aria-label="Call controls">
@@ -866,7 +869,7 @@ function App() {
                   </span>
                   <button
                     className="text-button"
-                    disabled={controlBusy || !remote}
+                    disabled={controlBusy || !participants.length}
                     onClick={() =>
                       action(() => controller.current.restartIce())
                     }
@@ -910,9 +913,9 @@ function App() {
                   </div>
                 </details>
                 <p className="room-note">
-                  Both people must allow recording. Recordings include voices,
-                  cameras and shared screens; device/system audio is not
-                  captured.
+                  Everyone must allow recording. Recording stops when someone
+                  joins or leaves. Recordings include voices, cameras and shared
+                  screens; device/system audio is not captured.
                 </p>
               </section>
               <aside className="chat-panel">
@@ -921,7 +924,9 @@ function App() {
                     <Icon name="chat" />
                     Room chat
                   </h2>
-                  <span>{state.peers.length}/2 people</span>
+                  <span>
+                    {state.peers.length}{state.maxParticipants > 0 ? `/${state.maxParticipants}` : ""} people
+                  </span>
                 </div>
                 <div
                   className="messages"

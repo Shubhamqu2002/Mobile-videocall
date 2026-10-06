@@ -30,6 +30,7 @@ import {
 
 const initial = {
   peers: [],
+  participants: [],
   messages: [],
   recordings: [],
   stats: {},
@@ -177,10 +178,10 @@ function AppContent() {
   const recordingBusy = ['starting', 'recording', 'stopping'].includes(
     recordingStatus,
   );
-  const other = state.remoteMember;
+  const participants = state.participants || [];
   const canRecord =
     state.connection === 'connected' &&
-    state.peers.length === 2 &&
+    state.peers.length >= 2 &&
     state.peers.every(p => p.consent);
   const locked = busy || !ready;
 
@@ -548,7 +549,7 @@ function AppContent() {
                   person on mobile or web.
                 </Text>
                 <View style={s.pills}>
-                  {['1:1 video', 'Screen sharing', 'Room chat'].map(text => (
+                  {['Group video', 'Screen sharing', 'Room chat'].map(text => (
                     <View key={text} style={s.pill}>
                       <Text style={s.pillText}>{text}</Text>
                     </View>
@@ -602,7 +603,7 @@ function AppContent() {
                 </View>
               </View>
               <Text style={s.hint}>
-                Recording requires both participants’ consent. Keep invitation
+                Recording requires every participant’s consent. Keep invitation
                 links private.
               </Text>
               <View style={s.card}>
@@ -633,7 +634,7 @@ function AppContent() {
                     />
                     <Text style={s.hint}>
                       {__DEV__
-                        ? 'Development build: use your PC’s LAN URL or USB reverse address for local testing. Both devices must use the same backend. Release builds use the configured HTTPS server.'
+                        ? 'Development build: use your PC’s LAN URL or USB reverse address for local testing. All devices must use the same backend. Release builds use the configured HTTPS server.'
                         : 'This build connects to the configured interview server.'}
                     </Text>
                     {__DEV__ && (
@@ -673,9 +674,9 @@ function AppContent() {
                   <Text style={s.eyebrow}>INTERVIEW ROOM</Text>
                   <Text style={s.cardTitle}>{state.status}</Text>
                   <Text style={s.hint}>
-                    {other
-                      ? `With ${other.name}${other.mic ? '' : ' · Mic muted'}`
-                      : 'Invite someone to join you'}
+                    {`${state.peers.length}${
+                      state.maxParticipants > 0 ? `/${state.maxParticipants}` : ''
+                    } people in this room`}
                     {state.stats.path ? ` · ${state.stats.path}` : ''}
                   </Text>
                 </View>
@@ -712,15 +713,18 @@ function AppContent() {
                       label="Your shared screen"
                     />
                   )}
-                  {other?.sharing && (
-                    <Tile
-                      stream={state.remoteScreen}
-                      enabled
-                      screen
-                      label={`${other.name} · Screen`}
-                    />
-                  )}
-                  <View style={[s.videoGrid, wide && s.row]}>
+                  {participants
+                    .filter(p => p.sharing)
+                    .map(participant => (
+                      <Tile
+                        key={`screen-${participant.id}`}
+                        stream={participant.screenStream}
+                        enabled
+                        screen
+                        label={`${participant.name} · Screen`}
+                      />
+                    ))}
+                  <View style={[s.videoGrid, wide && s.groupGrid]}>
                     <Tile
                       stream={state.local}
                       enabled={state.camera}
@@ -729,12 +733,15 @@ function AppContent() {
                       mirror={state.front !== false}
                       wide={wide}
                     />
-                    <Tile
-                      stream={state.remote}
-                      enabled={other?.camera}
-                      label={other?.name || 'Guest'}
-                      wide={wide}
-                    />
+                    {participants.map(participant => (
+                      <Tile
+                        key={participant.id}
+                        stream={participant.stream}
+                        enabled={participant.camera}
+                        label={`${participant.name} · ${participant.connection}`}
+                        wide={wide}
+                      />
+                    ))}
                   </View>
                   {!!state.cameraError && (
                     <Text style={s.errorText}>{state.cameraError}</Text>
@@ -804,7 +811,7 @@ function AppContent() {
                       compact
                       secondary
                       title="Reconnect"
-                      disabled={busy || !other}
+                      disabled={busy || !participants.length}
                       onPress={() => callAction(call => call.restartIce())}
                     />
                     <Button
@@ -835,9 +842,9 @@ function AppContent() {
                       }
                     />
                     <Text style={s.hint}>
-                      Both people must agree before recording. Turning this off
-                      stops recording for everyone. Screen sharing does not
-                      include device audio.
+                      Everyone must agree. Recording stops when participants
+                      join or leave. Turning this off stops recording for
+                      everyone. Screen sharing does not include device audio.
                     </Text>
                     {!state.hasTurn && (
                       <Text style={s.hint}>
@@ -1008,13 +1015,18 @@ const s = StyleSheet.create({
   chatColumn: { width: 330 },
   chatStack: { width: '100%' },
   videoGrid: { gap: 12 },
+  groupGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   tile: {
     height: 270,
     backgroundColor: '#172a3a',
     borderRadius: 22,
     overflow: 'hidden',
   },
-  wideTile: { flex: 1, height: 330 },
+  wideTile: { width: '48%', height: 280 },
   screenTile: { height: 300 },
   placeholder: {
     flex: 1,

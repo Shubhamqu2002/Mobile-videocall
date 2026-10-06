@@ -63,7 +63,7 @@ socket.on("connect", () =>
       ) {
         if (Date.now() > deadline)
           throw new Error(
-            "Recorder could not receive both participants. Check TURN."
+            "Recorder could not receive every participant. Check TURN."
           );
         if (stopping) return;
         await new Promise((r) => setTimeout(r, 100));
@@ -108,45 +108,36 @@ function tile(v, label, x, y, w, h, enabled = true) {
   ctx.font = "18px sans-serif";
   ctx.fillText(label, x + 12, y + h - 12, w - 24);
 }
+function grid(items, x, y, width, height, screen = false) {
+  if (!items.length) return;
+  const columns = Math.ceil(Math.sqrt((items.length * width) / height));
+  const cols = Math.min(items.length, Math.max(1, columns));
+  const rows = Math.ceil(items.length / cols);
+  const gap = 10;
+  const w = (width - gap * (cols - 1)) / cols;
+  const h = (height - gap * (rows - 1)) / rows;
+  items.forEach((m, i) =>
+    tile(
+      screen ? peers.get(m.id)?.screenVideo : peers.get(m.id)?.cameraVideo,
+      `${m.name}${screen ? " · Screen" : ""}`,
+      x + (i % cols) * (w + gap),
+      y + Math.floor(i / cols) * (h + gap),
+      w,
+      h,
+      screen || m.camera
+    )
+  );
+}
 function draw() {
   ctx.fillStyle = "#0c1321";
   ctx.fillRect(0, 0, 1280, 720);
   const shares = roster.filter((m) => m.sharing);
   if (shares.length) {
-    shares.forEach((m, i) =>
-      tile(
-        peers.get(m.id)?.screenVideo,
-        `${m.name} · Screen`,
-        16 + i * (1248 / shares.length),
-        16,
-        1248 / shares.length - 8,
-        510
-      )
-    );
-    roster.forEach((m, i) =>
-      tile(
-        peers.get(m.id)?.cameraVideo,
-        m.name,
-        16 + i * 632,
-        542,
-        616,
-        162,
-        m.camera
-      )
-    );
-  } else
-    roster.forEach((m, i) =>
-      tile(
-        peers.get(m.id)?.cameraVideo,
-        m.name,
-        16 + i * 632,
-        60,
-        616,
-        600,
-        m.camera
-      )
-    );
+    grid(shares, 16, 16, 1248, 460, true);
+    grid(roster, 16, 490, 1248, 214);
+  } else grid(roster, 16, 16, 1248, 688);
 }
+
 async function start() {
   audio = new AudioContext();
   await audio.resume();
@@ -154,7 +145,7 @@ async function start() {
   for (const p of peers.values()) {
     const source = audio.createMediaStreamSource(p.media),
       gain = audio.createGain();
-    gain.gain.value = 0.7;
+    gain.gain.value = 1 / Math.max(1, peers.size);
     source.connect(gain);
     gain.connect(destination);
   }

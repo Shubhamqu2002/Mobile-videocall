@@ -7,7 +7,7 @@ import { createHmac } from 'node:crypto';
 const once = (socket, event) => new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(new Error(`Timeout: ${event}`)), 3000); socket.once(event, data => { clearTimeout(timeout); resolve(data); }); });
 test('rooms authorize members, cap occupancy, isolate signaling, validate chat and issue TURN credentials', async () => {
   const origin = 'http://localhost:5173';
-  const service = createApp({ ALLOWED_ORIGINS: origin, TURN_URLS: 'turn:turn.example.test:3478', TURN_SECRET: 'test-only-secret', STUN_URL: '', ICE_TRANSPORT_POLICY: 'relay' });
+  const service = createApp({ MAX_ROOM_PARTICIPANTS: '2', ALLOWED_ORIGINS: origin, TURN_URLS: 'turn:turn.example.test:3478', TURN_SECRET: 'test-only-secret', STUN_URL: '', ICE_TRANSPORT_POLICY: 'relay' });
   await new Promise(r => service.http.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${service.http.address().port}`;
   const sockets = [];

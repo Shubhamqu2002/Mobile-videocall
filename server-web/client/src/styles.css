@@ -1200,3 +1200,14 @@ main {
     transition: none !important;
   }
 }
+
+/* Group calls: each participant has one camera tile, with separate screen tiles. */
+.video-grid, .screen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+.video-grid .video-tile { min-width: 0; aspect-ratio: 4 / 3; }
+.video-label { overflow-wrap: anywhere; }
+.group-invite { display: grid; gap: 8px; margin: 0 0 20px; font-size: 13px; }
+.group-invite input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #cad4d1; border-radius: 10px; }
